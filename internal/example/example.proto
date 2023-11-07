@@ -2,12 +2,20 @@ syntax = "proto3";
 
 option go_package = "github.com/clarkmcc/brpc/pkg/example;example";
 
-service Service {
-  rpc ExampleMethod (Empty) returns (Empty);
+service Greeter {
+  rpc Greet(GreetRequest) returns (GreetResponse);
 }
 
-service ClientService {
-  rpc ExampleClientMethod (Empty) returns (Empty);
+service Identifier {
+  rpc Identity(IdentityRequest) returns (IdentityResponse);
 }
 
-message Empty {}
+message GreetRequest {}
+message GreetResponse {
+  string greeting = 1;
+}
+
+message IdentityRequest {}
+message IdentityResponse{
+  string name = 1;
+}

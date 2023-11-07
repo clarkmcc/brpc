@@ -18,172 +18,172 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// ServiceClient is the client API for Service service.
+// GreeterClient is the client API for Greeter service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ServiceClient interface {
-	ExampleMethod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+type GreeterClient interface {
+	Greet(ctx context.Context, in *GreetRequest, opts ...grpc.CallOption) (*GreetResponse, error)
 }
 
-type serviceClient struct {
+type greeterClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewServiceClient(cc grpc.ClientConnInterface) ServiceClient {
-	return &serviceClient{cc}
+func NewGreeterClient(cc grpc.ClientConnInterface) GreeterClient {
+	return &greeterClient{cc}
 }
 
-func (c *serviceClient) ExampleMethod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
-	err := c.cc.Invoke(ctx, "/Service/ExampleMethod", in, out, opts...)
+func (c *greeterClient) Greet(ctx context.Context, in *GreetRequest, opts ...grpc.CallOption) (*GreetResponse, error) {
+	out := new(GreetResponse)
+	err := c.cc.Invoke(ctx, "/Greeter/Greet", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ServiceServer is the server API for Service service.
-// All implementations must embed UnimplementedServiceServer
+// GreeterServer is the server API for Greeter service.
+// All implementations must embed UnimplementedGreeterServer
 // for forward compatibility
-type ServiceServer interface {
-	ExampleMethod(context.Context, *Empty) (*Empty, error)
-	mustEmbedUnimplementedServiceServer()
+type GreeterServer interface {
+	Greet(context.Context, *GreetRequest) (*GreetResponse, error)
+	mustEmbedUnimplementedGreeterServer()
 }
 
-// UnimplementedServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedServiceServer struct {
+// UnimplementedGreeterServer must be embedded to have forward compatible implementations.
+type UnimplementedGreeterServer struct {
 }
 
-func (UnimplementedServiceServer) ExampleMethod(context.Context, *Empty) (*Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExampleMethod not implemented")
+func (UnimplementedGreeterServer) Greet(context.Context, *GreetRequest) (*GreetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Greet not implemented")
 }
-func (UnimplementedServiceServer) mustEmbedUnimplementedServiceServer() {}
+func (UnimplementedGreeterServer) mustEmbedUnimplementedGreeterServer() {}
 
-// UnsafeServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ServiceServer will
+// UnsafeGreeterServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GreeterServer will
 // result in compilation errors.
-type UnsafeServiceServer interface {
-	mustEmbedUnimplementedServiceServer()
+type UnsafeGreeterServer interface {
+	mustEmbedUnimplementedGreeterServer()
 }
 
-func RegisterServiceServer(s grpc.ServiceRegistrar, srv ServiceServer) {
-	s.RegisterService(&Service_ServiceDesc, srv)
+func RegisterGreeterServer(s grpc.ServiceRegistrar, srv GreeterServer) {
+	s.RegisterService(&Greeter_ServiceDesc, srv)
 }
 
-func _Service_ExampleMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+func _Greeter_Greet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GreetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ServiceServer).ExampleMethod(ctx, in)
+		return srv.(GreeterServer).Greet(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/Service/ExampleMethod",
+		FullMethod: "/Greeter/Greet",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ServiceServer).ExampleMethod(ctx, req.(*Empty))
+		return srv.(GreeterServer).Greet(ctx, req.(*GreetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Service_ServiceDesc is the grpc.ServiceDesc for Service service.
+// Greeter_ServiceDesc is the grpc.ServiceDesc for Greeter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Service_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "Service",
-	HandlerType: (*ServiceServer)(nil),
+var Greeter_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Greeter",
+	HandlerType: (*GreeterServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ExampleMethod",
-			Handler:    _Service_ExampleMethod_Handler,
+			MethodName: "Greet",
+			Handler:    _Greeter_Greet_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "example.proto",
 }
 
-// ClientServiceClient is the client API for ClientService service.
+// IdentifierClient is the client API for Identifier service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ClientServiceClient interface {
-	ExampleClientMethod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+type IdentifierClient interface {
+	Identity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error)
 }
 
-type clientServiceClient struct {
+type identifierClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewClientServiceClient(cc grpc.ClientConnInterface) ClientServiceClient {
-	return &clientServiceClient{cc}
+func NewIdentifierClient(cc grpc.ClientConnInterface) IdentifierClient {
+	return &identifierClient{cc}
 }
 
-func (c *clientServiceClient) ExampleClientMethod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
-	err := c.cc.Invoke(ctx, "/ClientService/ExampleClientMethod", in, out, opts...)
+func (c *identifierClient) Identity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error) {
+	out := new(IdentityResponse)
+	err := c.cc.Invoke(ctx, "/Identifier/Identity", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ClientServiceServer is the server API for ClientService service.
-// All implementations must embed UnimplementedClientServiceServer
+// IdentifierServer is the server API for Identifier service.
+// All implementations must embed UnimplementedIdentifierServer
 // for forward compatibility
-type ClientServiceServer interface {
-	ExampleClientMethod(context.Context, *Empty) (*Empty, error)
-	mustEmbedUnimplementedClientServiceServer()
+type IdentifierServer interface {
+	Identity(context.Context, *IdentityRequest) (*IdentityResponse, error)
+	mustEmbedUnimplementedIdentifierServer()
 }
 
-// UnimplementedClientServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedClientServiceServer struct {
+// UnimplementedIdentifierServer must be embedded to have forward compatible implementations.
+type UnimplementedIdentifierServer struct {
 }
 
-func (UnimplementedClientServiceServer) ExampleClientMethod(context.Context, *Empty) (*Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExampleClientMethod not implemented")
+func (UnimplementedIdentifierServer) Identity(context.Context, *IdentityRequest) (*IdentityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Identity not implemented")
 }
-func (UnimplementedClientServiceServer) mustEmbedUnimplementedClientServiceServer() {}
+func (UnimplementedIdentifierServer) mustEmbedUnimplementedIdentifierServer() {}
 
-// UnsafeClientServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ClientServiceServer will
+// UnsafeIdentifierServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to IdentifierServer will
 // result in compilation errors.
-type UnsafeClientServiceServer interface {
-	mustEmbedUnimplementedClientServiceServer()
+type UnsafeIdentifierServer interface {
+	mustEmbedUnimplementedIdentifierServer()
 }
 
-func RegisterClientServiceServer(s grpc.ServiceRegistrar, srv ClientServiceServer) {
-	s.RegisterService(&ClientService_ServiceDesc, srv)
+func RegisterIdentifierServer(s grpc.ServiceRegistrar, srv IdentifierServer) {
+	s.RegisterService(&Identifier_ServiceDesc, srv)
 }
 
-func _ClientService_ExampleClientMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+func _Identifier_Identity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IdentityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ClientServiceServer).ExampleClientMethod(ctx, in)
+		return srv.(IdentifierServer).Identity(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/ClientService/ExampleClientMethod",
+		FullMethod: "/Identifier/Identity",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ClientServiceServer).ExampleClientMethod(ctx, req.(*Empty))
+		return srv.(IdentifierServer).Identity(ctx, req.(*IdentityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// ClientService_ServiceDesc is the grpc.ServiceDesc for ClientService service.
+// Identifier_ServiceDesc is the grpc.ServiceDesc for Identifier service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var ClientService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "ClientService",
-	HandlerType: (*ClientServiceServer)(nil),
+var Identifier_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Identifier",
+	HandlerType: (*IdentifierServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ExampleClientMethod",
-			Handler:    _ClientService_ExampleClientMethod_Handler,
+			MethodName: "Identity",
+			Handler:    _Identifier_Identity_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

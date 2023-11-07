@@ -15,29 +15,30 @@ func main() {
 }
 
 func run() error {
-	server := brpc.NewServer(brpc.ServerConfig[example.ServiceServer, example.ClientServiceClient]{
-		ClientServiceBuilder: example.NewClientServiceClient,
-		ServerServiceBuilder: func(server *brpc.Server[example.ServiceServer, example.ClientServiceClient], registrar grpc.ServiceRegistrar) {
-			example.RegisterServiceServer(registrar, &service{Server: server})
+	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.IdentifierClient]{
+		ClientServiceBuilder: example.NewIdentifierClient,
+		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.IdentifierClient], registrar grpc.ServiceRegistrar) {
+			example.RegisterGreeterServer(registrar, &service{Server: server})
 		},
 	})
 	return server.Serve(":10000")
 }
 
 type service struct {
-	example.UnimplementedServiceServer
-	*brpc.Server[example.ServiceServer, example.ClientServiceClient]
+	example.UnimplementedGreeterServer
+	*brpc.Server[example.GreeterServer, example.IdentifierClient]
 }
 
-func (s *service) ExampleMethod(ctx context.Context, req *example.Empty) (*example.Empty, error) {
-	fmt.Println("Client called server method")
-	client := s.ClientFromContext(ctx)
-	_, err := client.ExampleClientMethod(ctx, &example.Empty{})
+func (s *service) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {
+	client, err := s.ClientFromContext(ctx)
 	if err != nil {
-		fmt.Println("error calling client from server")
 		return nil, err
 	}
-	fmt.Println("called client from server")
-
-	return &example.Empty{}, nil
+	res, err := client.Identity(ctx, &example.IdentityRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return &example.GreetResponse{
+		Greeting: fmt.Sprintf("Hello %v", res.GetName()),
+	}, nil
 }

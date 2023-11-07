@@ -15,39 +15,30 @@ func main() {
 }
 
 func run() error {
-	client, err := brpc.Dial[example.ClientServiceServer](":10000", func(r grpc.ServiceRegistrar) {
-		example.RegisterClientServiceServer(r, &service{})
+	conn, err := brpc.Dial[example.GreeterServer](":10000", func(r grpc.ServiceRegistrar) {
+		example.RegisterIdentifierServer(r, &service{})
 	})
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer conn.Close()
 
-	go func() {
-		err := client.Serve()
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	clientClient, err := brpc.ConstructClient(client, example.NewServiceClient)
+	client, err := brpc.Client(conn, example.NewGreeterClient)
 	if err != nil {
 		return err
 	}
-	_, err = clientClient.ExampleMethod(context.Background(), &example.Empty{})
+	res, err := client.Greet(context.Background(), &example.GreetRequest{})
 	if err != nil {
 		return err
 	}
-	fmt.Println("Called server method")
-
+	fmt.Printf("Got greeting: %v\n", res.GetGreeting())
 	return nil
 }
 
 type service struct {
-	example.UnimplementedClientServiceServer
+	example.UnimplementedIdentifierServer
 }
 
-func (s *service) ExampleClientMethod(ctx context.Context, req *example.Empty) (*example.Empty, error) {
-	fmt.Println("Server called example method")
-	return &example.Empty{}, nil
+func (s *service) Identity(ctx context.Context, req *example.IdentityRequest) (*example.IdentityResponse, error) {
+	return &example.IdentityResponse{Name: "brpc"}, nil
 }

@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"reflect"
 )
 
 const metadataClientIDKey = "brpc-metadata-client-id"
@@ -30,9 +31,10 @@ type Server[S, C any] struct {
 	clientServiceBuilder  func(conn grpc.ClientConnInterface) C
 	registerServerService func(server *Server[S, C], registrar grpc.ServiceRegistrar)
 	clients               *clientMap[C]
+	listener              *multiListener
 }
 
-func (s *Server[S, C]) ListenAndServe(address string, server *grpc.Server) error {
+func (s *Server[S, C]) ListenAndServe(address string) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -42,7 +44,7 @@ func (s *Server[S, C]) ListenAndServe(address string, server *grpc.Server) error
 		if err != nil {
 			return err
 		}
-		go s.handleConnection(conn, server)
+		go s.handleConnection(conn)
 	}
 }
 
@@ -58,64 +60,70 @@ func (s *Server[S, C]) Serve(address string) error {
 	srv := grpc.NewServer()
 	s.registerServerService(s, srv)
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			return err
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				s.Logger.Error("accepting connection", "error", err)
+				continue
+			}
+			go s.handleConnection(conn)
 		}
-		go s.handleConnection(conn, srv)
-	}
+	}()
+
+	return srv.Serve(s.listener)
 }
 
-func (s *Server[S, C]) handleConnection(conn net.Conn, server *grpc.Server) {
-	err := s.negotiate(conn, server)
+func (s *Server[S, C]) handleConnection(conn net.Conn) {
+	err := s.negotiate(conn)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return
 		}
-		s.Logger.Error("handling connection", "error", err)
+		s.Logger.Error("handling connection", "error", err, "type", reflect.TypeOf(err).String())
 	}
 }
 
-func (s *Server[S, C]) negotiate(conn net.Conn, server *grpc.Server) error {
+func (s *Server[S, C]) negotiate(conn net.Conn) error {
 	session, err := yamux.Server(conn, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating yamux server: %w", err)
 	}
-	defer session.Close()
 
 	id, err := sendClientID(session.Open)
 	if err != nil {
-		return fmt.Errorf("negotiating client id: %w", err)
+		return fmt.Errorf("sending client id: %w", err)
 	}
 
 	grpcConn, err := session.Open()
 	if err != nil {
-		return err
+		return fmt.Errorf("opening server->client grpc connection: %w", err)
 	}
+	defer grpcConn.Close()
 	grpcSession, err := yamux.Client(grpcConn, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating double-multiplexed session for server->client grpc: %w", err)
 	}
+	defer grpcSession.Close()
 	grpcChildConn, err := grpcSession.Open()
 	if err != nil {
-		return err
+		return fmt.Errorf("opening double-multiplexed server->client gprc connection: %w", err)
 	}
+	defer grpcChildConn.Close()
 
 	grpcClient, err := dial(grpcChildConn, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return err
+		return fmt.Errorf("dialing client's grpc server: %w", err)
 	}
+	defer grpcClient.Close()
 	err = s.clients.add(id, s.clientServiceBuilder(grpcClient))
 	if err != nil {
-		return err
+		return fmt.Errorf("registering client with id %s: %w", id, err)
 	}
 	defer s.clients.remove(id)
-
-	err = server.Serve(session)
-	if err != nil {
-		return err
-	}
+	defer s.Logger.Info("client disconnected", "id", id)
+	s.listener.AddListener(session)
+	<-session.CloseChan()
 	return nil
 }
 
@@ -151,6 +159,7 @@ func NewServer[S, C any](config ServerConfig[S, C]) *Server[S, C] {
 		clients:               newClientMap[C](),
 		clientServiceBuilder:  config.ClientServiceBuilder,
 		registerServerService: config.ServerServiceBuilder,
+		listener:              newMultiListener(),
 	}
 }
 

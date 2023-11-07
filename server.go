@@ -84,7 +84,8 @@ func (s *Server[S, C]) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server[S, C]) negotiate(conn net.Conn) error {
+func (s *Server[S, C]) negotiate(conn net.Conn) (err error) {
+	defer conn.Close()
 	session, err := yamux.Server(conn, nil)
 	if err != nil {
 		return fmt.Errorf("creating yamux server: %w", err)
@@ -111,11 +112,16 @@ func (s *Server[S, C]) negotiate(conn net.Conn) error {
 	}
 	defer grpcChildConn.Close()
 
+	// Create our gRPC client that allows for server->client RPCs
 	grpcClient, err := dial(grpcChildConn, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("dialing client's grpc server: %w", err)
 	}
 	defer grpcClient.Close()
+
+	// Register this gRPC client into our client map so that when the user's
+	// gRPC service implementation receives an RPC, it can look up the clients
+	// gRPC client and connect to it.
 	err = s.clients.add(id, s.clientServiceBuilder(grpcClient))
 	if err != nil {
 		return fmt.Errorf("registering client with id %s: %w", id, err)

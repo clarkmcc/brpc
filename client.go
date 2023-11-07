@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
+	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -46,12 +47,16 @@ func DialContext[Service any](ctx context.Context, target string, register Servi
 	return c, c.connect(ctx, target, register)
 }
 
-func (c *ClientConn[S]) connect(ctx context.Context, target string, register ServiceRegisterFunc[S]) error {
-	var err error
+func (c *ClientConn[S]) connect(ctx context.Context, target string, register ServiceRegisterFunc[S]) (err error) {
 	c.conn, err = c.Dialer(ctx, target)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			multierr.AppendFunc(&err, c.conn.Close)
+		}
+	}()
 	c.session, err = yamux.Client(c.conn, nil)
 	if err != nil {
 		return ErrYamuxNegotiationFailed{inner: err, code: ErrorCodeCreatingYamuxClient}

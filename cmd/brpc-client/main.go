@@ -21,7 +21,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
 
 	client, err := brpc.Client(conn, example.NewGreeterClient)
 	if err != nil {
@@ -32,6 +31,10 @@ func run() error {
 		return err
 	}
 	fmt.Printf("Got greeting: %v\n", res.GetGreeting())
+	err = conn.Close()
+	if err != nil {
+		return fmt.Errorf("closing: %v", err)
+	}
 	return nil
 }
 

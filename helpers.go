@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"net"
 )
@@ -30,7 +31,7 @@ func sendClientID(dialer func() (net.Conn, error)) (id uuid.UUID, err error) {
 	if err != nil {
 		return id, err
 	}
-	defer conn.Close()
+	defer multierr.AppendFunc(&err, conn.Close)
 	n, err := conn.Write(id[:])
 	if err != nil {
 		return id, err

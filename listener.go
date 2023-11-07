@@ -6,7 +6,9 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"sync"
+	"syscall"
 )
 
 var _ net.Listener = &multiListener{}
@@ -24,7 +26,7 @@ type multiListener struct {
 	listenersLock sync.Mutex
 	listeners     []net.Listener
 	connChan      chan net.Conn
-	errChan       chan error
+	errChan       chan error // errors on this channel
 	closeChan     chan struct{}
 	wg            sync.WaitGroup
 	logger        *slog.Logger
@@ -50,15 +52,9 @@ func (ml *multiListener) AddListener(l net.Listener) {
 		for {
 			conn, err := l.Accept()
 			if err != nil {
-				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
-					return
+				if !isTransientError(err) {
+					slog.Warn("error accepting connection", "error", err)
 				}
-				slog.Warn("error accepting connection", "error", err)
-				// Don't propagate errors from listeners
-				//select {
-				//case ml.errChan <- err:
-				//case <-ml.closeChan:
-				//}
 				return
 			}
 
@@ -94,4 +90,22 @@ func (ml *multiListener) Close() error {
 
 func (ml *multiListener) Addr() net.Addr {
 	return &net.TCPAddr{}
+}
+
+func isTransientError(err error) bool {
+	// Directly check for net.ErrClosed or io.EOF
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+		return true
+	}
+
+	// Check for a net.OpError and a nested os.SyscallError indicating ECONNRESET
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Err != nil {
+		var syscallErr *os.SyscallError
+		if errors.As(opErr.Err, &syscallErr) && syscallErr.Err == syscall.ECONNRESET {
+			return true
+		}
+	}
+
+	return false
 }

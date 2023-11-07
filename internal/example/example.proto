@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+option go_package = "github.com/clarkmcc/brpc/pkg/example;example";
+
+service Service {
+  rpc ExampleMethod (Empty) returns (Empty);
+}
+
+service ClientService {
+  rpc ExampleClientMethod (Empty) returns (Empty);
+}
+
+message Empty {}

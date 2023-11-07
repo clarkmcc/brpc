@@ -8,26 +8,35 @@ import (
 	"net"
 )
 
-func negotiateConnIdClient(dialer func() (net.Conn, error), uuid uuid.UUID) error {
-	conn, err := dialer()
-	if err != nil {
-		return fmt.Errorf("dialing: %w", err)
-	}
-	_, err = conn.Write(uuid[:])
-	if err != nil {
-		return err
-	}
-	return conn.Close()
-}
-
-func negotiateConnIdServer(listener net.Listener) (id uuid.UUID, err error) {
+func getClientID(listener net.Listener) (id uuid.UUID, err error) {
 	conn, err := listener.Accept()
 	if err != nil {
 		return id, err
 	}
-	_, err = conn.Read(id[:])
+	// Server closes the client
+	n, err := conn.Read(id[:])
 	if err != nil {
 		return id, err
+	}
+	if n != len(id) {
+		return id, fmt.Errorf("read %v bytes, expected %v", n, len(id))
+	}
+	return id, nil
+}
+
+func sendClientID(dialer func() (net.Conn, error)) (id uuid.UUID, err error) {
+	id = uuid.New()
+	conn, err := dialer()
+	if err != nil {
+		return id, err
+	}
+	defer conn.Close()
+	n, err := conn.Write(id[:])
+	if err != nil {
+		return id, err
+	}
+	if n != len(id) {
+		return id, fmt.Errorf("wrote %v bytes, expected %v", n, len(id))
 	}
 	return id, nil
 }

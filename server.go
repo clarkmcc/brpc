@@ -82,12 +82,12 @@ func (s *Server[S, C]) negotiate(conn net.Conn, server *grpc.Server) error {
 	if err != nil {
 		return err
 	}
+	defer session.Close()
 
-	id, err := negotiateConnIdServer(session)
+	id, err := sendClientID(session.Open)
 	if err != nil {
 		return fmt.Errorf("negotiating client id: %w", err)
 	}
-	defer s.clients.remove(id)
 
 	grpcConn, err := session.Open()
 	if err != nil {
@@ -106,7 +106,11 @@ func (s *Server[S, C]) negotiate(conn net.Conn, server *grpc.Server) error {
 	if err != nil {
 		return err
 	}
-	s.clients.add(id, s.clientServiceBuilder(grpcClient))
+	err = s.clients.add(id, s.clientServiceBuilder(grpcClient))
+	if err != nil {
+		return err
+	}
+	defer s.clients.remove(id)
 
 	err = server.Serve(session)
 	if err != nil {
@@ -164,6 +168,7 @@ func (s *Server[S, C]) ClientFromContext(ctx context.Context) (client C, err err
 	if err != nil {
 		return client, status.Error(codes.InvalidArgument, "invalid client id")
 	}
+	s.Logger.Info("getting client", "id", id)
 	client, ok = s.clients.get(id)
 	if !ok {
 		return client, status.Error(codes.NotFound, "client not found")

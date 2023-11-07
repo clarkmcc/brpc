@@ -18,18 +18,18 @@ func run() error {
 	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.IdentifierClient]{
 		ClientServiceBuilder: example.NewIdentifierClient,
 		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.IdentifierClient], registrar grpc.ServiceRegistrar) {
-			example.RegisterGreeterServer(registrar, &service{Server: server})
+			example.RegisterGreeterServer(registrar, &GreeterService{Server: server})
 		},
 	})
 	return server.Serve(":10000")
 }
 
-type service struct {
+type GreeterService struct {
 	example.UnimplementedGreeterServer
 	*brpc.Server[example.GreeterServer, example.IdentifierClient]
 }
 
-func (s *service) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {
+func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {
 	client, err := s.ClientFromContext(ctx)
 	if err != nil {
 		return nil, err

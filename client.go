@@ -52,37 +52,32 @@ func (c *ClientConn[Service]) connect(ctx context.Context, target string, regist
 		return ErrYamuxNegotiationFailed{inner: err, code: ErrorCodeCreatingYamuxClient}
 	}
 
-	// Open a stream just to negotiate the client id, then close it
-	err = negotiateConnIdClient(c.session.Open, c.uuid)
+	c.uuid, err = getClientID(c.session)
 	if err != nil {
-		return fmt.Errorf("negotiating client id: %w", err)
+		return fmt.Errorf("getting client id from server: %w", err)
 	}
 
 	// Wait for server to open a connection for server -> client gRPC
 	grpcConn, err := c.session.Accept()
 	if err != nil {
-		return fmt.Errorf("accepting grpc session: %w", err)
+		return fmt.Errorf("accepting connection for server->client grpc: %w", err)
 	}
 	c.grpcSession, err = yamux.Server(grpcConn, nil)
 	if err != nil {
-		return fmt.Errorf("creating grpc session: %w", err)
+		return fmt.Errorf("creating double-multiplexed session for client->server grpc: %w", err)
 	}
 
 	// Open a stream for the gRPC connection
 	c.grpcConn, err = c.session.Open()
 	if err != nil {
-		return ErrYamuxNegotiationFailed{inner: err, code: ErrorCodeOpeningGrpcConnection}
+		return fmt.Errorf("opening multiplexed client->server gprc connection: %w", err)
 	}
+
+	c.server = grpc.NewServer()
+	register(c.server)
 
 	// Start serving the client's gRPC server
 	go c.serve()
-
-	// At this point we have:
-	// 1. A real-world TCP connection (c.conn)
-	// 2. A multiplexed session (c.session)
-	// 3. A net.Conn multiplexed on top of session (c.grpcConn)
-	c.server = grpc.NewServer()
-	register(c.server)
 	return nil
 }
 

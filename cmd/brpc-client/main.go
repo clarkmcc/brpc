@@ -15,7 +15,7 @@ func main() {
 }
 
 func run() error {
-	conn, err := brpc.Dial[example.GreeterServer](":10000", func(r grpc.ServiceRegistrar) {
+	conn, err := brpc.Dial[example.GreeterServer]("127.0.0.1:10000", func(r grpc.ServiceRegistrar) {
 		example.RegisterIdentifierServer(r, &service{})
 	})
 	if err != nil {

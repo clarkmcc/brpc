@@ -2,9 +2,11 @@ package brpc
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -24,14 +26,14 @@ type ServiceRegisterFunc[Service any] func(registrar grpc.ServiceRegistrar)
 //  1. Serve a gRPC server that is accessible to a brpc server.
 //  2. Construct a gRPC client that can call the gRPC server.
 type ClientConn[S any] struct {
-	Dialer func(ctx context.Context, target string) (net.Conn, error)
+	Dialer func(ctx context.Context, target string) (quic.Connection, error)
 
-	conn        net.Conn       // The underlying net.Conn obtained from the Dialer
-	session     *yamux.Session // A session that multiplexes all communication
-	grpcConn    net.Conn       // A net.Conn over session reserved for server->client RPCs
-	grpcSession *yamux.Session // A yamux.Session over session that multiplexes all client->server RPCs
-	server      *grpc.Server   // The gRPC server that is served over the grpcConn for server->client RPCs
-	uuid        uuid.UUID      // The client ID assigned by the server. Must be present on all client->server RPCs.
+	conn       quic.Connection // The underlying net.Conn obtained from the Dialer
+	session    *yamux.Session  // A session that multiplexes all communication
+	grpcConn   quic.Stream     // A net.Conn over session reserved for server->client RPCs
+	grpcStream quic.Stream
+	server     *grpc.Server // The gRPC server that is served over the grpcConn for server->client RPCs
+	uuid       uuid.UUID    // The client ID assigned by the server. Must be present on all client->server RPCs.
 }
 
 func Dial[Service any](target string, register ServiceRegisterFunc[Service]) (*ClientConn[Service], error) {
@@ -40,8 +42,10 @@ func Dial[Service any](target string, register ServiceRegisterFunc[Service]) (*C
 
 func DialContext[Service any](ctx context.Context, target string, register ServiceRegisterFunc[Service]) (*ClientConn[Service], error) {
 	c := &ClientConn[Service]{
-		Dialer: func(ctx context.Context, target string) (net.Conn, error) {
-			return DefaultDialer.DialContext(ctx, "tcp", target)
+		Dialer: func(ctx context.Context, target string) (quic.Connection, error) {
+			return quic.DialAddr(ctx, target, &tls.Config{
+				InsecureSkipVerify: true,
+			}, nil)
 		},
 	}
 	return c, c.connect(ctx, target, register)
@@ -54,31 +58,24 @@ func (c *ClientConn[S]) connect(ctx context.Context, target string, register Ser
 	}
 	defer func() {
 		if err != nil {
-			multierr.AppendFunc(&err, c.conn.Close)
+			multierr.AppendFunc(&err, func() error {
+				return c.conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), err.Error())
+			})
 		}
 	}()
-	c.session, err = yamux.Client(c.conn, nil)
-	if err != nil {
-		return ErrYamuxNegotiationFailed{inner: err, code: ErrorCodeCreatingYamuxClient}
-	}
 
-	c.uuid, err = getClientID(c.session)
+	c.uuid, err = getClientID(ctx, c.conn)
 	if err != nil {
 		return fmt.Errorf("getting client id from server: %w", err)
 	}
 
-	// Wait for server to open a connection for server -> client gRPC
-	grpcConn, err := c.session.Accept()
-	if err != nil {
-		return fmt.Errorf("accepting connection for server->client grpc: %w", err)
-	}
-	c.grpcSession, err = yamux.Server(grpcConn, nil)
-	if err != nil {
-		return fmt.Errorf("creating double-multiplexed session for client->server grpc: %w", err)
-	}
+	//c.grpcStream, err = c.conn.AcceptStream(ctx)
+	//if err != nil {
+	//	return fmt.Errorf("accepting stream for client->server grpc: %w", err)
+	//}
 
 	// Open a stream for the gRPC connection
-	c.grpcConn, err = c.session.Open()
+	c.grpcConn, err = c.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("opening multiplexed client->server gprc connection: %w", err)
 	}
@@ -92,7 +89,7 @@ func (c *ClientConn[S]) connect(ctx context.Context, target string, register Ser
 }
 
 func (c *ClientConn[S]) serve() error {
-	return c.server.Serve(c.grpcSession)
+	return c.server.Serve(&quicListener{conn: c.conn})
 }
 
 func (c *ClientConn[S]) Close() error {
@@ -103,7 +100,7 @@ func (c *ClientConn[S]) Close() error {
 		// This also closes c.conn
 		c.server.GracefulStop()
 	}
-	return c.session.Close()
+	return nil //c.session.Close()
 }
 
 // WithUnaryConnectionIdentifier is a grpc.DialOption that adds the client's UUID to

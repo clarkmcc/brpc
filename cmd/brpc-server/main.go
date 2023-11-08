@@ -21,7 +21,7 @@ func run() error {
 			example.RegisterGreeterServer(registrar, &GreeterService{Server: server})
 		},
 	})
-	return server.Serve(":10000")
+	return server.Serve(context.Background(), ":10000")
 }
 
 type GreeterService struct {

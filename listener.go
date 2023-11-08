@@ -1,7 +1,9 @@
 package brpc
 
 import (
+	"context"
 	"errors"
+	"github.com/quic-go/quic-go"
 	"go.uber.org/multierr"
 	"io"
 	"log/slog"
@@ -108,4 +110,43 @@ func isTransientError(err error) bool {
 	}
 
 	return false
+}
+
+var _ net.Conn = &quicConn{}
+
+// quicConn is a net.Conn implementation that wraps a quic.Stream.
+type quicConn struct {
+	quic.Stream
+}
+
+func (q *quicConn) LocalAddr() net.Addr {
+	return (*net.TCPAddr)(nil)
+}
+
+func (q *quicConn) RemoteAddr() net.Addr {
+	return (*net.TCPAddr)(nil)
+}
+
+var _ net.Listener = &quicListener{}
+
+// quicListener is a net.Listener implementation that wraps a quic.Connection
+// and allows consumers of a net.Listener to accept bi-directional quic streams.
+type quicListener struct {
+	conn quic.Connection
+}
+
+func (q *quicListener) Accept() (net.Conn, error) {
+	stream, err := q.conn.AcceptStream(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return &quicConn{Stream: stream}, nil
+}
+
+func (q *quicListener) Close() error {
+	return q.conn.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
+}
+
+func (q *quicListener) Addr() net.Addr {
+	return (*net.TCPAddr)(nil)
 }

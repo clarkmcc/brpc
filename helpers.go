@@ -2,22 +2,25 @@ package brpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/quic-go/quic-go"
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
+	"io"
 	"net"
 )
 
-func getClientID(listener net.Listener) (id uuid.UUID, err error) {
-	conn, err := listener.Accept()
+func getClientID(ctx context.Context, conn quic.Connection) (id uuid.UUID, err error) {
+	stream, err := conn.AcceptUniStream(ctx)
 	if err != nil {
-		return id, err
+		return id, fmt.Errorf("accepting: %w", err)
 	}
 	// Server closes the client
-	n, err := conn.Read(id[:])
-	if err != nil {
-		return id, err
+	n, err := stream.Read(id[:])
+	if err != nil && !errors.Is(err, io.EOF) {
+		return id, fmt.Errorf("reading: %w", err)
 	}
 	if n != len(id) {
 		return id, fmt.Errorf("read %v bytes, expected %v", n, len(id))
@@ -25,14 +28,14 @@ func getClientID(listener net.Listener) (id uuid.UUID, err error) {
 	return id, nil
 }
 
-func sendClientID(dialer func() (net.Conn, error)) (id uuid.UUID, err error) {
+func sendClientID(ctx context.Context, conn quic.Connection) (id uuid.UUID, err error) {
 	id = uuid.New()
-	conn, err := dialer()
+	stream, err := conn.OpenUniStreamSync(ctx)
 	if err != nil {
 		return id, err
 	}
-	defer multierr.AppendFunc(&err, conn.Close)
-	n, err := conn.Write(id[:])
+	defer multierr.AppendFunc(&err, stream.Close)
+	n, err := stream.Write(id[:])
 	if err != nil {
 		return id, err
 	}
@@ -44,8 +47,8 @@ func sendClientID(dialer func() (net.Conn, error)) (id uuid.UUID, err error) {
 
 // dial is a wrapper around grpc.Dial(...) that handles tunneling over an already existing
 // net.Conn. It does not require a target address, as the connection is already established.
-func dial(conn net.Conn, options ...grpc.DialOption) (*grpc.ClientConn, error) {
-	return grpc.Dial("", append(options, withContextDialer(conn))...)
+func dial(stream quic.Stream, options ...grpc.DialOption) (*grpc.ClientConn, error) {
+	return grpc.Dial("", append(options, withContextDialer(&quicConn{Stream: stream}))...)
 }
 
 // withContextDialer is a grpc.DialOption that allows you to provide a net.Conn to use

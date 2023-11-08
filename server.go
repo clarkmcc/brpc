@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/clarkmcc/brpc/internal/example"
 	"github.com/google/uuid"
-	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
+	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,7 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 	"io"
 	"log/slog"
-	"net"
 	"reflect"
 )
 
@@ -34,25 +35,26 @@ type Server[S, C any] struct {
 	listener              *multiListener
 }
 
-func (s *Server[S, C]) ListenAndServe(address string) error {
-	listener, err := net.Listen("tcp", address)
+func (s *Server[S, C]) ListenAndServe(ctx context.Context, addr string) error {
+	listener, err := quic.ListenAddr(addr, example.TLSConfig(), nil)
 	if err != nil {
 		return err
 	}
+
 	for {
-		conn, err := listener.Accept()
+		conn, err := listener.Accept(ctx)
 		if err != nil {
 			return err
 		}
-		go s.handleConnection(conn)
+		go s.handleConnection(ctx, conn)
 	}
 }
 
-func (s *Server[S, C]) Serve(address string) error {
+func (s *Server[S, C]) Serve(ctx context.Context, addr string) error {
 	if s.registerServerService == nil {
 		return errors.New("server service builder not provided")
 	}
-	listener, err := net.Listen("tcp", address)
+	listener, err := quic.ListenAddr(addr, example.TLSConfig(), nil)
 	if err != nil {
 		return err
 	}
@@ -62,20 +64,20 @@ func (s *Server[S, C]) Serve(address string) error {
 
 	go func() {
 		for {
-			conn, err := listener.Accept()
+			conn, err := listener.Accept(ctx)
 			if err != nil {
 				s.Logger.Error("accepting connection", "error", err)
 				continue
 			}
-			go s.handleConnection(conn)
+			go s.handleConnection(ctx, conn)
 		}
 	}()
 
 	return srv.Serve(s.listener)
 }
 
-func (s *Server[S, C]) handleConnection(conn net.Conn) {
-	err := s.negotiate(conn)
+func (s *Server[S, C]) handleConnection(ctx context.Context, conn quic.Connection) {
+	err := s.handler(ctx, conn)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return
@@ -84,40 +86,29 @@ func (s *Server[S, C]) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server[S, C]) negotiate(conn net.Conn) (err error) {
-	defer conn.Close()
-	session, err := yamux.Server(conn, nil)
-	if err != nil {
-		return fmt.Errorf("creating yamux server: %w", err)
-	}
+func (s *Server[S, C]) handler(ctx context.Context, conn quic.Connection) (err error) {
+	// When this function returns, everything should be cleaned up
+	defer multierr.AppendFunc(&err, func() error {
+		return conn.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
+	})
 
-	id, err := sendClientID(session.Open)
+	id, err := sendClientID(ctx, conn)
 	if err != nil {
 		return fmt.Errorf("sending client id: %w", err)
 	}
 
-	grpcConn, err := session.Open()
+	// Open a connection used for server->client RPCs and create a gRPC
+	// client using that connection.
+	grpcConn, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("opening server->client grpc connection: %w", err)
 	}
-	defer grpcConn.Close()
-	grpcSession, err := yamux.Client(grpcConn, nil)
-	if err != nil {
-		return fmt.Errorf("creating double-multiplexed session for server->client grpc: %w", err)
-	}
-	defer grpcSession.Close()
-	grpcChildConn, err := grpcSession.Open()
-	if err != nil {
-		return fmt.Errorf("opening double-multiplexed server->client gprc connection: %w", err)
-	}
-	defer grpcChildConn.Close()
-
-	// Create our gRPC client that allows for server->client RPCs
-	grpcClient, err := dial(grpcChildConn, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	defer multierr.AppendFunc(&err, grpcConn.Close)
+	grpcClient, err := dial(grpcConn, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("dialing client's grpc server: %w", err)
 	}
-	defer grpcClient.Close()
+	defer multierr.AppendFunc(&err, grpcClient.Close)
 
 	// Register this gRPC client into our client map so that when the user's
 	// gRPC service implementation receives an RPC, it can look up the clients
@@ -128,8 +119,8 @@ func (s *Server[S, C]) negotiate(conn net.Conn) (err error) {
 	}
 	defer s.clients.remove(id)
 	defer s.Logger.Info("client disconnected", "id", id)
-	s.listener.AddListener(session)
-	<-session.CloseChan()
+	s.listener.AddListener(&quicListener{conn: conn})
+	<-conn.Context().Done()
 	return nil
 }
 

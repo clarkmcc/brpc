@@ -16,7 +16,7 @@ func main() {
 
 func run() error {
 	conn, err := brpc.Dial[example.GreeterServer]("127.0.0.1:10000", func(r grpc.ServiceRegistrar) {
-		example.RegisterIdentifierServer(r, &service{})
+		example.RegisterNamerServer(r, &service{})
 	})
 	if err != nil {
 		return err
@@ -39,9 +39,9 @@ func run() error {
 }
 
 type service struct {
-	example.UnimplementedIdentifierServer
+	example.UnimplementedNamerServer
 }
 
-func (s *service) Identity(ctx context.Context, req *example.IdentityRequest) (*example.IdentityResponse, error) {
-	return &example.IdentityResponse{Name: "brpc"}, nil
+func (s *service) Name(_ context.Context, _ *example.NameRequest) (*example.NameResponse, error) {
+	return &example.NameResponse{Name: "brpc"}, nil
 }

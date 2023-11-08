@@ -104,86 +104,86 @@ var Greeter_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "example.proto",
 }
 
-// IdentifierClient is the client API for Identifier service.
+// NamerClient is the client API for Namer service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type IdentifierClient interface {
-	Identity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error)
+type NamerClient interface {
+	Name(ctx context.Context, in *NameRequest, opts ...grpc.CallOption) (*NameResponse, error)
 }
 
-type identifierClient struct {
+type namerClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewIdentifierClient(cc grpc.ClientConnInterface) IdentifierClient {
-	return &identifierClient{cc}
+func NewNamerClient(cc grpc.ClientConnInterface) NamerClient {
+	return &namerClient{cc}
 }
 
-func (c *identifierClient) Identity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error) {
-	out := new(IdentityResponse)
-	err := c.cc.Invoke(ctx, "/Identifier/Identity", in, out, opts...)
+func (c *namerClient) Name(ctx context.Context, in *NameRequest, opts ...grpc.CallOption) (*NameResponse, error) {
+	out := new(NameResponse)
+	err := c.cc.Invoke(ctx, "/Namer/Name", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// IdentifierServer is the server API for Identifier service.
-// All implementations must embed UnimplementedIdentifierServer
+// NamerServer is the server API for Namer service.
+// All implementations must embed UnimplementedNamerServer
 // for forward compatibility
-type IdentifierServer interface {
-	Identity(context.Context, *IdentityRequest) (*IdentityResponse, error)
-	mustEmbedUnimplementedIdentifierServer()
+type NamerServer interface {
+	Name(context.Context, *NameRequest) (*NameResponse, error)
+	mustEmbedUnimplementedNamerServer()
 }
 
-// UnimplementedIdentifierServer must be embedded to have forward compatible implementations.
-type UnimplementedIdentifierServer struct {
+// UnimplementedNamerServer must be embedded to have forward compatible implementations.
+type UnimplementedNamerServer struct {
 }
 
-func (UnimplementedIdentifierServer) Identity(context.Context, *IdentityRequest) (*IdentityResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Identity not implemented")
+func (UnimplementedNamerServer) Name(context.Context, *NameRequest) (*NameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Name not implemented")
 }
-func (UnimplementedIdentifierServer) mustEmbedUnimplementedIdentifierServer() {}
+func (UnimplementedNamerServer) mustEmbedUnimplementedNamerServer() {}
 
-// UnsafeIdentifierServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to IdentifierServer will
+// UnsafeNamerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to NamerServer will
 // result in compilation errors.
-type UnsafeIdentifierServer interface {
-	mustEmbedUnimplementedIdentifierServer()
+type UnsafeNamerServer interface {
+	mustEmbedUnimplementedNamerServer()
 }
 
-func RegisterIdentifierServer(s grpc.ServiceRegistrar, srv IdentifierServer) {
-	s.RegisterService(&Identifier_ServiceDesc, srv)
+func RegisterNamerServer(s grpc.ServiceRegistrar, srv NamerServer) {
+	s.RegisterService(&Namer_ServiceDesc, srv)
 }
 
-func _Identifier_Identity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(IdentityRequest)
+func _Namer_Name_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NameRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(IdentifierServer).Identity(ctx, in)
+		return srv.(NamerServer).Name(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/Identifier/Identity",
+		FullMethod: "/Namer/Name",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentifierServer).Identity(ctx, req.(*IdentityRequest))
+		return srv.(NamerServer).Name(ctx, req.(*NameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Identifier_ServiceDesc is the grpc.ServiceDesc for Identifier service.
+// Namer_ServiceDesc is the grpc.ServiceDesc for Namer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Identifier_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "Identifier",
-	HandlerType: (*IdentifierServer)(nil),
+var Namer_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Namer",
+	HandlerType: (*NamerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Identity",
-			Handler:    _Identifier_Identity_Handler,
+			MethodName: "Name",
+			Handler:    _Namer_Name_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

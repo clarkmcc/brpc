@@ -6,8 +6,8 @@ service Greeter {
   rpc Greet(GreetRequest) returns (GreetResponse);
 }
 
-service Identifier {
-  rpc Identity(IdentityRequest) returns (IdentityResponse);
+service Namer {
+  rpc Name(NameRequest) returns (NameResponse);
 }
 
 message GreetRequest {}
@@ -15,7 +15,7 @@ message GreetResponse {
   string greeting = 1;
 }
 
-message IdentityRequest {}
-message IdentityResponse{
+message NameRequest {}
+message NameResponse{
   string name = 1;
 }

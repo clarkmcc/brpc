@@ -47,9 +47,9 @@ import (
 )
 
 func main() {
-	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.IdentifierClient]{
-		ClientServiceBuilder: example.NewIdentifierClient,
-		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.IdentifierClient], registrar grpc.ServiceRegistrar) {
+	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.NamerClient]{
+		ClientServiceBuilder: example.NewNamerClient,
+		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.NamerClient], registrar grpc.ServiceRegistrar) {
 			example.RegisterGreeterServer(registrar, &GreeterService{Server: server})
 		},
 	})
@@ -58,7 +58,7 @@ func main() {
 
 type GreeterService struct {
 	example.UnimplementedGreeterServer
-	*brpc.Server[example.GreeterServer, example.IdentifierClient]
+	*brpc.Server[example.GreeterServer, example.NamerClient]
 }
 
 func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {
@@ -66,7 +66,7 @@ func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*e
 	if err != nil {
 		return nil, err
 	}
-	res, err := client.Identity(ctx, &example.IdentityRequest{})
+	res, err := client.Name(ctx, &example.NameRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,7 @@ func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*e
 		Greeting: fmt.Sprintf("Hello %v", res.GetName()),
 	}, nil
 }
+
 ```
 
 # Create the Client
@@ -95,8 +96,8 @@ import (
 )
 
 func main() {
-	conn, err := brpc.Dial[example.GreeterServer](":10000", func(r grpc.ServiceRegistrar) {
-		example.RegisterIdentifierServer(r, &myClientService{})
+	conn, err := brpc.Dial[example.GreeterServer]("127.0.0.1:10000", func(r grpc.ServiceRegistrar) {
+		example.RegisterNamerServer(r, &myClientService{})
 	})
 	if err != nil {
 		panic(err)
@@ -105,20 +106,21 @@ func main() {
 
 	client, err := brpc.Client(conn, example.NewGreeterClient)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	res, err := client.Greet(context.Background(), &example.GreetRequest{})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	fmt.Printf("Got greeting: %v\n", res.GetGreeting())
 }
 
 type myClientService struct {
-	example.UnimplementedIdentifierServer
+	example.UnimplementedNamerServer
 }
 
-func (s *myClientService) Identity(ctx context.Context, req *example.IdentityRequest) (*example.IdentityResponse, error) {
-	return &example.IdentityResponse{Name: "brpc"}, nil
+func (s *myClientService) Name(_ context.Context, _ *example.NameRequest) (*example.NameResponse, error) {
+	return &example.NameResponse{Name: "brpc"}, nil
 }
+
 ```

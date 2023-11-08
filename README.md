@@ -8,8 +8,8 @@ func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*e
 	if err != nil {
 		return nil, err
 	}
-	// Let's call the client's Identity method, an RPC on the client's gRPC service.
-	res, err := client.Identity(ctx, &example.IdentityRequest{})
+	// Let's call the client's Name method, an RPC on the client's gRPC service.
+	res, err := client.Name(ctx, &example.NameRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -22,11 +22,11 @@ func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*e
 ## Features
 * **Bidirectional** - Clients can expose a gRPC server of their own, allowing the real gRPC server to call RPCs on the client.
 * **Low-invasive** - Takes advantage of all the generated types and functions from `protoc`, you just need to plug everything into brpc.
-* **Single TCP connection** - All connections are multiplexed across a single TCP connection.
+* **Single connection** - All connections are multiplexed across a single QUIC connection.
 * **Go generics** - Uses Go generics to make it easy to plug everything together correctly.
 
 ## Internals
-This library uses a single TCP connection and all other connections are multiplexed across this connection. Clients receive connection IDs from the server which they then provide with every subsequent client-to-server RPC request, and the brpc server exposes the client's RPC methods inside your gRPC service so that you can call them from the server.
+This library uses a single QUIC connection and all other connections are multiplexed across this connection. Clients receive connection IDs from the server which they then provide with every subsequent client-to-server RPC request, and the brpc server exposes the client's RPC methods inside your gRPC service so that you can call them from the server.
 
 
 ## Example

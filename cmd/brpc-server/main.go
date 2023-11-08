@@ -15,9 +15,9 @@ func main() {
 }
 
 func run() error {
-	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.IdentifierClient]{
-		ClientServiceBuilder: example.NewIdentifierClient,
-		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.IdentifierClient], registrar grpc.ServiceRegistrar) {
+	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.NamerClient]{
+		ClientServiceBuilder: example.NewNamerClient,
+		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.NamerClient], registrar grpc.ServiceRegistrar) {
 			example.RegisterGreeterServer(registrar, &GreeterService{Server: server})
 		},
 	})
@@ -26,7 +26,7 @@ func run() error {
 
 type GreeterService struct {
 	example.UnimplementedGreeterServer
-	*brpc.Server[example.GreeterServer, example.IdentifierClient]
+	*brpc.Server[example.GreeterServer, example.NamerClient]
 }
 
 func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {
@@ -34,7 +34,7 @@ func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*e
 	if err != nil {
 		return nil, err
 	}
-	res, err := client.Identity(ctx, &example.IdentityRequest{})
+	res, err := client.Name(ctx, &example.NameRequest{})
 	if err != nil {
 		return nil, err
 	}

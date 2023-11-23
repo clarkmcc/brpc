@@ -2,6 +2,7 @@ package main
 
 import (
 	context "context"
+	"crypto/tls"
 	"fmt"
 	"github.com/clarkmcc/brpc"
 	"github.com/clarkmcc/brpc/internal/example"
@@ -15,14 +16,20 @@ func main() {
 }
 
 func run() error {
-	conn, err := brpc.Dial[example.GreeterServer]("127.0.0.1:10000", func(r grpc.ServiceRegistrar) {
-		example.RegisterNamerServer(r, &service{})
-	})
+	conn, err := brpc.Dial("127.0.0.1:10000", &tls.Config{})
 	if err != nil {
 		return err
 	}
+	go func() {
+		err = brpc.ServeClientService[example.NamerServer](make(chan struct{}), conn, func(registrar grpc.ServiceRegistrar) {
+			example.RegisterNamerServer(registrar, &service{})
+		})
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	client, err := brpc.Client(conn, example.NewGreeterClient)
+	client := example.NewGreeterClient(conn)
 	if err != nil {
 		return err
 	}

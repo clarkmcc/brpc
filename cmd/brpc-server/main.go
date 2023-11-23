@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/clarkmcc/brpc"
 	"github.com/clarkmcc/brpc/internal/example"
+	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
 )
 
@@ -15,18 +16,26 @@ func main() {
 }
 
 func run() error {
-	server := brpc.NewServer(brpc.ServerConfig[example.GreeterServer, example.NamerClient]{
+	// Create a quic listener
+	l, err := quic.ListenAddr(":10000", example.TLSConfig(), nil)
+	if err != nil {
+		return err
+	}
+
+	// Create the gRPC server, the bRPC server, and register our gRPC service
+	srv := grpc.NewServer()
+	server := brpc.NewServer(brpc.ServerConfig[example.NamerClient]{
 		ClientServiceBuilder: example.NewNamerClient,
-		ServerServiceBuilder: func(server *brpc.Server[example.GreeterServer, example.NamerClient], registrar grpc.ServiceRegistrar) {
-			example.RegisterGreeterServer(registrar, &GreeterService{Server: server})
-		},
+		Server:               srv,
 	})
-	return server.Serve(context.Background(), ":10000")
+	example.RegisterGreeterServer(srv, &GreeterService{Server: server})
+
+	return server.Serve(context.Background(), l)
 }
 
 type GreeterService struct {
 	example.UnimplementedGreeterServer
-	*brpc.Server[example.GreeterServer, example.NamerClient]
+	*brpc.Server[example.NamerClient]
 }
 
 func (s *GreeterService) Greet(ctx context.Context, _ *example.GreetRequest) (*example.GreetResponse, error) {

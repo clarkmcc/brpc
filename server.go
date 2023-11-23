@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/clarkmcc/brpc/internal/example"
 	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
 	"go.uber.org/multierr"
@@ -26,46 +25,28 @@ const metadataClientIDKey = "brpc-metadata-client-id"
 // Server works by handling the initial connection negotiation, and then multiplexes all
 // future communication, including client->server RPCs and server->client RPCs over a
 // single TCP connection.
-type Server[S, C any] struct {
+type Server[C any] struct {
 	Logger *slog.Logger
+	*grpc.Server
 
 	clientServiceBuilder  func(conn grpc.ClientConnInterface) C
-	registerServerService func(server *Server[S, C], registrar grpc.ServiceRegistrar)
+	registerServerService func(server *Server[C], registrar grpc.ServiceRegistrar)
 	clients               *clientMap[C]
 	listener              *multiListener
 }
 
-func (s *Server[S, C]) ListenAndServe(ctx context.Context, addr string) error {
-	listener, err := quic.ListenAddr(addr, example.TLSConfig(), nil)
-	if err != nil {
-		return err
+func (s *Server[C]) Serve(ctx context.Context, listener *quic.Listener) error {
+	if s.Server == nil {
+		return fmt.Errorf("server not provided")
 	}
-
-	for {
-		conn, err := listener.Accept(ctx)
-		if err != nil {
-			return err
-		}
-		go s.handleConnection(ctx, conn)
-	}
-}
-
-func (s *Server[S, C]) Serve(ctx context.Context, addr string) error {
-	if s.registerServerService == nil {
-		return errors.New("server service builder not provided")
-	}
-	listener, err := quic.ListenAddr(addr, example.TLSConfig(), nil)
-	if err != nil {
-		return err
-	}
-
-	srv := grpc.NewServer()
-	s.registerServerService(s, srv)
 
 	go func() {
 		for {
 			conn, err := listener.Accept(ctx)
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return
+				}
 				s.Logger.Error("accepting connection", "error", err)
 				continue
 			}
@@ -73,10 +54,10 @@ func (s *Server[S, C]) Serve(ctx context.Context, addr string) error {
 		}
 	}()
 
-	return srv.Serve(s.listener)
+	return s.Server.Serve(s.listener)
 }
 
-func (s *Server[S, C]) handleConnection(ctx context.Context, conn quic.Connection) {
+func (s *Server[C]) handleConnection(ctx context.Context, conn quic.Connection) {
 	err := s.handler(ctx, conn)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -86,7 +67,7 @@ func (s *Server[S, C]) handleConnection(ctx context.Context, conn quic.Connectio
 	}
 }
 
-func (s *Server[S, C]) handler(ctx context.Context, conn quic.Connection) (err error) {
+func (s *Server[C]) handler(ctx context.Context, conn quic.Connection) (err error) {
 	// When this function returns, everything should be cleaned up
 	defer multierr.AppendFunc(&err, func() error {
 		return conn.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
@@ -127,18 +108,7 @@ func (s *Server[S, C]) handler(ctx context.Context, conn quic.Connection) (err e
 // ServerConfig allows you to configure the server. It is generic over S (the gRPC service
 // interface) and C (the gRPC client interface). When building a brpc server, you'll need
 // to provide these builders for the server and client services.
-type ServerConfig[S, C any] struct {
-	// ServerServiceBuilder is a function that registers the server's gRPC service with
-	// the brpc server. It needs to be provided only if brpc is managing the gRPC server.
-	// If you're providing your own gRPC server by calling ListenAndServe, then this option
-	// can be omitted.
-	//
-	// The Server is also provided because it allows access to the gRPC client used to
-	// allow the server to call client RPCs. Users may choose to embed a reference to ths
-	// server in their own server implementation, so that they can call client RPCs in
-	// response to the client calling server RPCs.
-	ServerServiceBuilder func(server *Server[S, C], registrar grpc.ServiceRegistrar)
-
+type ServerConfig[C any] struct {
 	// ClientServiceBuilder is a function that provides a grpc.ClientConnInterface so that
 	// you can then construct your gRPC client. This client allows you to call methods on
 	// your client, as if your client were a server. If I had generated a client called
@@ -147,21 +117,24 @@ type ServerConfig[S, C any] struct {
 	// 		ClientServiceBuilder: example.NewClientServiceClient
 	//
 	ClientServiceBuilder func(cc grpc.ClientConnInterface) C
+
+	// The gRPC server that we should forward RPC requests to
+	Server *grpc.Server
 }
 
 // NewServer constructs
-func NewServer[S, C any](config ServerConfig[S, C]) *Server[S, C] {
-	return &Server[S, C]{
-		Logger:                slog.Default(),
-		clients:               newClientMap[C](),
-		clientServiceBuilder:  config.ClientServiceBuilder,
-		registerServerService: config.ServerServiceBuilder,
-		listener:              newMultiListener(),
+func NewServer[C any](config ServerConfig[C]) *Server[C] {
+	return &Server[C]{
+		Logger:               slog.Default(),
+		Server:               config.Server,
+		clients:              newClientMap[C](),
+		clientServiceBuilder: config.ClientServiceBuilder,
+		listener:             newMultiListener(),
 	}
 }
 
 // ClientFromContext returns a client
-func (s *Server[S, C]) ClientFromContext(ctx context.Context) (client C, err error) {
+func (s *Server[C]) ClientFromContext(ctx context.Context) (client C, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return client, status.Error(codes.InvalidArgument, "metadata not provided")

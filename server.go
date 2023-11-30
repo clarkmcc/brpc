@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/clarkmcc/brpc/internal/grpcsync"
 	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
 	"go.uber.org/multierr"
@@ -32,7 +33,9 @@ type Server[C any] struct {
 	clientServiceBuilder  func(conn grpc.ClientConnInterface) C
 	registerServerService func(server *Server[C], registrar grpc.ServiceRegistrar)
 	clients               *clientMap[C]
+	quicListener          *quic.Listener
 	listener              *multiListener
+	shutdown              *grpcsync.Event
 }
 
 func (s *Server[C]) Serve(ctx context.Context, listener *quic.Listener) error {
@@ -42,6 +45,13 @@ func (s *Server[C]) Serve(ctx context.Context, listener *quic.Listener) error {
 
 	go func() {
 		for {
+			select {
+			case <-s.shutdown.Done():
+				_ = listener.Close()
+				return
+			default:
+			}
+
 			conn, err := listener.Accept(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -50,6 +60,7 @@ func (s *Server[C]) Serve(ctx context.Context, listener *quic.Listener) error {
 				s.Logger.Error("accepting connection", "error", err)
 				continue
 			}
+
 			go s.handleConnection(ctx, conn)
 		}
 	}()
@@ -58,6 +69,15 @@ func (s *Server[C]) Serve(ctx context.Context, listener *quic.Listener) error {
 }
 
 func (s *Server[C]) handleConnection(ctx context.Context, conn quic.Connection) {
+	go func() {
+		select {
+		case <-s.shutdown.Done():
+			_ = conn.CloseWithError(quic.ApplicationErrorCode(100), "server shutdown")
+		case <-conn.Context().Done():
+			return
+		}
+	}()
+
 	err := s.handler(ctx, conn)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -105,6 +125,11 @@ func (s *Server[C]) handler(ctx context.Context, conn quic.Connection) (err erro
 	return nil
 }
 
+func (s *Server[C]) GracefulStop() {
+	s.shutdown.Fire()
+	s.Server.GracefulStop()
+}
+
 // ServerConfig allows you to configure the server. It is generic over S (the gRPC service
 // interface) and C (the gRPC client interface). When building a brpc server, you'll need
 // to provide these builders for the server and client services.
@@ -130,6 +155,7 @@ func NewServer[C any](config ServerConfig[C]) *Server[C] {
 		clients:              newClientMap[C](),
 		clientServiceBuilder: config.ClientServiceBuilder,
 		listener:             newMultiListener(),
+		shutdown:             grpcsync.NewEvent(),
 	}
 }
 
